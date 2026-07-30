@@ -1,4 +1,4 @@
-import { Trophy, Play } from "lucide-react";
+import { Trophy, Play, RotateCcw } from "lucide-react";
 
 import {
   Card,
@@ -22,8 +22,15 @@ function ScoreRule({ points, label }) {
   );
 }
 
-export default function StartScreen({ totalCountries, onStart }) {
+export default function StartScreen({
+  totalCountries,
+  hasSavedSession,
+  onStart,
+  onResume,
+  onOpenRecord,
+}) {
   const best = getBest();
+  const hasHistory = Boolean(best);
 
   return (
     <Card className="animate-pop-in">
@@ -31,8 +38,8 @@ export default function StartScreen({ totalCountries, onStart }) {
         <div className="mx-auto mb-2 text-5xl">🗺️</div>
         <CardTitle className="text-2xl">Quiz sulle Capitali</CardTitle>
         <CardDescription>
-          Riconosci la capitale di ogni stato. Sono {totalCountries} nazioni, in
-          ordine casuale.
+          Riconosci la capitale di ogni stato. Sono {totalCountries} nazioni,
+          in ordine casuale.
         </CardDescription>
       </CardHeader>
 
@@ -47,25 +54,46 @@ export default function StartScreen({ totalCountries, onStart }) {
 
         <p className="rounded-lg bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
           💡 Non serve la grafia perfetta: piccoli errori di battitura e gli
-          accenti vengono perdonati.
+          accenti vengono perdonati (ma niente scorciatoie: nomi troppo simili
+          a un'altra capitale sono rifiutati).
         </p>
 
-        {best && (
-          <div className="flex items-center justify-center gap-2 text-sm">
-            <Trophy className="size-4 text-amber-400" />
-            <span className="text-muted-foreground">
-              Tuo record:{" "}
-              <span className="font-bold text-foreground">
-                {best.score}/{best.max}
-              </span>
-            </span>
-          </div>
-        )}
+        <div className="space-y-2 pt-1">
+          {hasSavedSession ? (
+            <>
+              <Button size="xl" className="w-full" onClick={onResume}>
+                <Play className="fill-current" />
+                Riprendi la partita
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={onStart}
+              >
+                <RotateCcw />
+                Inizia una nuova partita
+              </Button>
+            </>
+          ) : (
+            <Button size="xl" className="w-full" onClick={onStart}>
+              <Play className="fill-current" />
+              Inizia il quiz
+            </Button>
+          )}
 
-        <Button size="lg" className="w-full" onClick={onStart}>
-          <Play className="fill-current" />
-          Inizia il quiz
-        </Button>
+          {hasHistory && (
+            <Button
+              variant="ghost"
+              size="lg"
+              className="w-full text-muted-foreground"
+              onClick={onOpenRecord}
+            >
+              <Trophy className="text-amber-400" />
+              Il mio record ({best.score}/{best.max})
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
