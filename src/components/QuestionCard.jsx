@@ -76,6 +76,14 @@ export default function QuestionCard({ entry, onNext }) {
   const totalPoints = points.reduce((a, b) => a + b, 0);
   const maxPoints = total * POINTS;
 
+  // Auto-avanzamento: quando la domanda è risolta, dopo 1s passa alla prossima.
+  // L'utente può comunque cliccare "Prossima" per andare avanti prima.
+  useEffect(() => {
+    if (!resolved) return;
+    const t = setTimeout(() => onNext(totalPoints), 850);
+    return () => clearTimeout(t);
+  }, [resolved, onNext, totalPoints]);
+
   const finish = (nextSolved = solved, nextPoints = points) => {
     setSolved(nextSolved);
     setPoints(nextPoints);
@@ -316,20 +324,30 @@ export default function QuestionCard({ entry, onNext }) {
                 </>
               )}
             </div>
-            <div className="space-y-1 text-sm">
-              {slots.map((slot, i) => (
-                <div key={i} className="flex items-center justify-center gap-2 text-foreground">
-                  {solved[i] ? (
+            <div className="space-y-1.5">
+              {slots.map((slot, i) =>
+                solved[i] ? (
+                  <div
+                    key={i}
+                    className="flex items-center justify-center gap-2 text-sm text-foreground"
+                  >
                     <Check className="size-4 text-emerald-400" />
-                  ) : (
-                    <X className="size-4 text-red-400" />
-                  )}
-                  <span className="font-semibold">{slot.name}</span>
-                  <span className={solved[i] ? "text-emerald-400" : "text-muted-foreground"}>
-                    +{solved[i] ? points[i] : 0}
-                  </span>
-                </div>
-              ))}
+                    <span className="font-semibold">{slot.name}</span>
+                    <span className="text-emerald-400">+{points[i]}</span>
+                  </div>
+                ) : (
+                  // Capitale NON indovinata: più grande, in rosso, ben evidente,
+                  // così nel tempo prima della prossima domanda si riesce a
+                  // memorizzarla.
+                  <div
+                    key={i}
+                    className="flex items-center justify-center gap-2 rounded-md bg-red-500/10 px-2 py-1 text-lg font-extrabold text-red-400 sm:text-xl"
+                  >
+                    <X className="size-5 shrink-0" />
+                    <span>{slot.name}</span>
+                  </div>
+                )
+              )}
             </div>
             <Badge
               variant={allSolved ? "success" : noneSolved ? "destructive" : "default"}
