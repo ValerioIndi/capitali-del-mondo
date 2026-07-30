@@ -123,13 +123,23 @@ export default function App() {
     startGame();
   };
 
+  // Richiesta di iniziare una nuova partita: se ne esiste una salvata, chiedi
+  // conferma prima di sovrascriverla (stessa modale usata da "Ricomincia").
+  const requestNewGame = () => {
+    if (savedSession) {
+      setShowRestart(true);
+    } else {
+      startGame();
+    }
+  };
+
   const year = useMemo(() => new Date().getFullYear(), []);
   const best = getBest();
   const history = getHistory();
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col px-4 pb-5 pt-3 sm:pt-5">
-      <header className="mb-3 flex items-center justify-center gap-2 text-center">
+      <header className="mb-3 flex items-center justify-center gap-2 py-4 text-center sm:py-6">
         <span className="text-2xl">🌍</span>
         <h1 className="text-lg font-extrabold tracking-tight sm:text-xl">
           Capitali del Mondo
@@ -159,7 +169,7 @@ export default function App() {
             <StartScreen
               totalCountries={capitals.length}
               hasSavedSession={Boolean(savedSession)}
-              onStart={startGame}
+              onStart={requestNewGame}
               onResume={resumeGame}
               onOpenRecord={() => setShowRecord(true)}
             />
@@ -170,9 +180,9 @@ export default function App() {
           <>
             <motion.div
               key={`q-${index}`}
-              initial={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <QuestionCard entry={current} onNext={handleNext} />
             </motion.div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useAnimation } from "framer-motion";
 import { Check, X, ArrowRight, Lightbulb, Globe, HelpCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,10 +13,14 @@ import { allCapitalNames } from "@/data/capitals";
 const MAX_HINTS = 2; // massimo lettere iniziali rivelate per capitale
 const POINTS = 3; // punti pieni per capitale (senza aiuti)
 
-/** Prima lettera maiuscola (senza toccare il resto). */
-function capitalizeFirst(str) {
+/**
+ * Prima lettera di ogni parola maiuscola (senza toccare il resto).
+ * Es. "santo domingo" -> "Santo Domingo", "l'avana" -> "L'Avana".
+ * Considera separatori: spazi, apostrofi, trattini.
+ */
+function toTitleCase(str) {
   if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  return str.replace(/(^|[\s'’\-])(\p{L})/gu, (_, sep, ch) => sep + ch.toUpperCase());
 }
 
 /**
@@ -66,8 +70,10 @@ export default function QuestionCard({ entry, onNext }) {
   const [hint, setHint] = useState(() => Array(total).fill(0));
   const [boxes, setBoxes] = useState(() => Array(total).fill(""));
   const [resolved, setResolved] = useState(false);
-  const [shake, setShake] = useState(0);
   const firstInputRef = useRef(null);
+  // Controlla l'animazione di "shake" sull'input senza rimontarlo, così il
+  // focus (e quindi la tastiera mobile) resta attivo quando appare l'hint.
+  const shakeControls = useAnimation();
 
   useEffect(() => {
     firstInputRef.current?.focus();
@@ -156,9 +162,15 @@ export default function QuestionCard({ entry, onNext }) {
     const nextHint = [...hint];
     nextHint[target]++;
     setHint(nextHint);
-    setShake((s) => s + 1);
+    // Anima lo shake senza rimontare il div (così l'input non perde il focus)
+    shakeControls.start({
+      x: [0, -8, 8, -6, 6, 0],
+      transition: { duration: 0.4 },
+    });
     // Cancella l'input dopo un tentativo sbagliato (richiesta esplicita)
     setBoxes(Array(stillUnsolved.length).fill(""));
+    // Assicura il focus (l'input non è stato smontato, quindi su iOS la
+    // tastiera resta aperta perché siamo ancora nel gesto utente).
     firstInputRef.current?.focus();
   };
 
@@ -172,7 +184,7 @@ export default function QuestionCard({ entry, onNext }) {
   };
 
   const setBox = (i, val) => {
-    const forced = capitalizeFirst(val);
+    const forced = toTitleCase(val);
     setBoxes((prev) => prev.map((b, idx) => (idx === i ? forced : b)));
   };
 
@@ -187,7 +199,7 @@ export default function QuestionCard({ entry, onNext }) {
   const noneSolved = solved.every((s) => !s);
 
   return (
-    <Card className="animate-pop-in overflow-hidden">
+    <Card className="overflow-hidden">
       <CardContent className="space-y-4 p-5 sm:space-y-5 sm:p-6">
         {/* Messaggio speciale (es. Palestina) */}
         {entry.specialMessage && (
@@ -264,11 +276,7 @@ export default function QuestionCard({ entry, onNext }) {
 
         {/* Caselle di risposta */}
         {!resolved && (
-          <motion.div
-            key={shake}
-            animate={shake ? { x: [0, -8, 8, -6, 6, 0] } : {}}
-            className="space-y-2"
-          >
+          <motion.div animate={shakeControls} className="space-y-2">
             {boxes.map((val, i) => (
               <Input
                 key={i}
@@ -360,7 +368,18 @@ export default function QuestionCard({ entry, onNext }) {
 
         {/* Pulsanti azione */}
         <div className="space-y-2">
-          <Button className="w-full" size="xl" onClick={submit}>
+          <Button
+            className="w-full"
+            size="xl"
+            onClick={submit}
+            // Non rubare il focus all'input: così la tastiera mobile resta aperta
+            onMouseDown={(e) => {
+              if (!resolved) e.preventDefault();
+            }}
+            onTouchStart={(e) => {
+              if (!resolved) e.preventDefault();
+            }}
+          >
             {resolved ? (
               <>
                 Prossima <ArrowRight />

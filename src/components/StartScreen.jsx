@@ -54,8 +54,7 @@ export default function StartScreen({
 
         <p className="rounded-lg bg-primary/10 px-3 py-2 text-xs text-muted-foreground">
           💡 Non serve la grafia perfetta: piccoli errori di battitura e gli
-          accenti vengono perdonati (ma niente scorciatoie: nomi troppo simili
-          a un'altra capitale sono rifiutati).
+          accenti vengono perdonati (attento ad alcune eccezioni!).
         </p>
 
         <div className="space-y-2 pt-1">
