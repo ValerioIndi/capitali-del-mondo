@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { RotateCcw, Trophy, Sparkles } from "lucide-react";
+import { RotateCcw, Trophy, Sparkles, Clock } from "lucide-react";
 
 import {
   Card,
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { saveResult, getBest, getHistory } from "@/utils/storage";
+import { formatMs } from "@/utils/time";
 
 function messaggio(ratio) {
   if (ratio >= 0.9) return "Fenomenale! Sei un vero geografo. 🌟";
@@ -31,7 +32,7 @@ function formatDate(iso) {
   }
 }
 
-export default function ResultScreen({ score, maxScore, onRestart }) {
+export default function ResultScreen({ score, maxScore, timeMs, onRestart }) {
   const ratio = maxScore > 0 ? score / maxScore : 0;
   const percent = Math.round(ratio * 100);
 
@@ -44,11 +45,11 @@ export default function ResultScreen({ score, maxScore, onRestart }) {
   useEffect(() => {
     if (savedRef.current) return;
     savedRef.current = true;
-    const record = saveResult(score, maxScore);
+    const record = saveResult(score, maxScore, timeMs);
     setIsRecord(record);
     setBest(getBest());
     setHistory(getHistory());
-  }, [score, maxScore]);
+  }, [score, maxScore, timeMs]);
 
   return (
     <Card className="animate-pop-in">
@@ -74,6 +75,12 @@ export default function ResultScreen({ score, maxScore, onRestart }) {
           <p className="mt-1 text-sm text-muted-foreground">
             {percent}% del punteggio massimo
           </p>
+          {Number.isFinite(timeMs) && (
+            <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1 text-sm font-mono tabular-nums">
+              <Clock className="size-4" />
+              {formatMs(timeMs)}
+            </p>
+          )}
         </div>
 
         {isRecord && (
@@ -99,6 +106,11 @@ export default function ResultScreen({ score, maxScore, onRestart }) {
               <span className="font-bold text-foreground">
                 {best.score}/{best.max}
               </span>
+              {Number.isFinite(best.timeMs) && (
+                <span className="ml-1 font-mono tabular-nums text-foreground">
+                  ({formatMs(best.timeMs)})
+                </span>
+              )}
             </span>
           </div>
         )}
@@ -119,6 +131,11 @@ export default function ResultScreen({ score, maxScore, onRestart }) {
                   </span>
                   <span className="font-medium">
                     {h.score}/{h.max}
+                    {Number.isFinite(h.timeMs) && (
+                      <span className="ml-2 text-xs font-mono tabular-nums text-muted-foreground">
+                        {formatMs(h.timeMs)}
+                      </span>
+                    )}
                   </span>
                 </div>
               ))}

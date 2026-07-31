@@ -1,4 +1,4 @@
-import { Trophy, Play, RotateCcw } from "lucide-react";
+import { Trophy, Play, RotateCcw, Clock } from "lucide-react";
 
 import {
   Card,
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getBest } from "@/utils/storage";
+import { formatMs } from "@/utils/time";
 
 function ScoreRule({ points, label }) {
   return (
@@ -25,6 +26,7 @@ function ScoreRule({ points, label }) {
 export default function StartScreen({
   totalCountries,
   hasSavedSession,
+  savedElapsedMs,
   onStart,
   onResume,
   onOpenRecord,
@@ -64,6 +66,12 @@ export default function StartScreen({
                 <Play className="fill-current" />
                 Riprendi la partita
               </Button>
+              {savedElapsedMs > 0 && (
+                <p className="flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  Tempo finora: <span className="font-mono tabular-nums">{formatMs(savedElapsedMs)}</span>
+                </p>
+              )}
               <Button
                 variant="outline"
                 size="lg"

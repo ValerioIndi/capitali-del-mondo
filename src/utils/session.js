@@ -24,15 +24,22 @@ export function loadSession() {
 }
 
 /**
- * Salva lo stato della partita rinnovando il TTL. Struttura minima:
- *   { order: string[], index: number, score: number, updatedAt: number }
- * `order` sono i nomi degli stati nell'ordine mescolato scelto a inizio partita.
+ * Salva lo stato della partita rinnovando il TTL. Struttura:
+ *   { order: string[], index, score, elapsedMs, updatedAt }
+ * `elapsedMs` è il tempo di gioco accumulato in millisecondi (con il
+ * cronometro fermo, quindi al netto delle pause).
  */
-export function saveSession({ order, index, score }) {
+export function saveSession({ order, index, score, elapsedMs }) {
   try {
     localStorage.setItem(
       KEY,
-      JSON.stringify({ order, index, score, updatedAt: Date.now() })
+      JSON.stringify({
+        order,
+        index,
+        score,
+        elapsedMs: elapsedMs || 0,
+        updatedAt: Date.now(),
+      })
     );
   } catch {
     // localStorage non disponibile: ignoriamo

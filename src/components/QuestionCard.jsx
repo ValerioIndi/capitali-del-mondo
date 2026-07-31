@@ -75,6 +75,41 @@ export default function QuestionCard({ entry, onNext }) {
   // focus (e quindi la tastiera mobile) resta attivo quando appare l'hint.
   const shakeControls = useAnimation();
 
+  // Ref per onNext, così il timer di auto-advance NON dipende dall'identità
+  // di onNext (che cambia ogni render di App per via del tick del cronometro).
+  const onNextRef = useRef(onNext);
+  onNextRef.current = onNext;
+
+  // Timer imperativo per l'auto-avanzamento (pianificato in `finish`).
+  const advanceTimerRef = useRef(null);
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    };
+  }, []);
+
+  // Reset degli stati quando cambia la domanda, ESEGUITO DURANTE IL RENDER.
+  // Pattern "Adjusting State When a Prop Changes" (React docs): usiamo uno
+  // useState (non un ref!) per tracciare la prev entry, così React tiene
+  // traccia correttamente del reset attraverso ri-render (StrictMode ecc.).
+  // L'input mantiene la stessa key: React lo riutilizza -> focus preservato.
+  const [prevEntry, setPrevEntry] = useState(entry);
+  if (prevEntry !== entry) {
+    setPrevEntry(entry);
+    setSolved(Array(total).fill(false));
+    setPoints(Array(total).fill(0));
+    setHint(Array(total).fill(0));
+    setBoxes(Array(total).fill(""));
+    setResolved(false);
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+  }
+
+  // Focus sull'input al mount e ad ogni nuova domanda. Poiché l'input
+  // NON viene mai smontato tra domande (stessa istanza React), il focus
+  // in genere è già suo; questo .focus() è una sicurezza.
   useEffect(() => {
     firstInputRef.current?.focus();
   }, [entry]);
@@ -82,19 +117,20 @@ export default function QuestionCard({ entry, onNext }) {
   const totalPoints = points.reduce((a, b) => a + b, 0);
   const maxPoints = total * POINTS;
 
-  // Auto-avanzamento: quando la domanda è risolta, dopo 1s passa alla prossima.
-  // L'utente può comunque cliccare "Prossima" per andare avanti prima.
-  useEffect(() => {
-    if (!resolved) return;
-    const t = setTimeout(() => onNext(totalPoints), 850);
-    return () => clearTimeout(t);
-  }, [resolved, onNext, totalPoints]);
-
   const finish = (nextSolved = solved, nextPoints = points) => {
     setSolved(nextSolved);
     setPoints(nextPoints);
     setResolved(true);
-    setBoxes([]);
+    // NON azzeriamo boxes qui: l'input resta montato -> focus preservato.
+
+    // Auto-avanzamento dopo 1.2s (pianificato imperativamente, non con useEffect,
+    // per non essere disturbato dai re-render del cronometro in App).
+    const pointsSum = nextPoints.reduce((a, b) => a + b, 0);
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    advanceTimerRef.current = setTimeout(() => {
+      onNextRef.current(pointsSum);
+      advanceTimerRef.current = null;
+    }, 1200);
   };
 
   const submit = () => {
@@ -208,8 +244,17 @@ export default function QuestionCard({ entry, onNext }) {
           </div>
         )}
 
-        {/* Bandiera + continente + domanda */}
-        <div className="text-center">
+        {/* Bandiera + continente + domanda: solo QUESTO blocco si rimonta
+            ad ogni domanda (per la piccola animazione di entrata).
+            L'input più sotto invece resta la stessa istanza, così il focus
+            e la tastiera mobile non vanno via. */}
+        <motion.div
+          key={entry.country}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center"
+        >
           <div className="mx-auto mb-2 flex justify-center">
             <Flag
               emoji={entry.flag}
@@ -236,7 +281,7 @@ export default function QuestionCard({ entry, onNext }) {
               Ne ha {total}: indovinale tutte ({POINTS} punti ciascuna)
             </p>
           )}
-        </div>
+        </motion.div>
 
         {/* Capitali già indovinate (chip) */}
         {multi && !resolved && solved.some(Boolean) && (
@@ -274,35 +319,37 @@ export default function QuestionCard({ entry, onNext }) {
           </motion.div>
         )}
 
-        {/* Caselle di risposta */}
-        {!resolved && (
-          <motion.div animate={shakeControls} className="space-y-2">
-            {boxes.map((val, i) => (
-              <Input
-                key={i}
-                ref={i === 0 ? firstInputRef : undefined}
-                value={val}
-                onChange={(e) => setBox(i, e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={multi ? `Capitale ${i + 1}…` : "Scrivi la capitale…"}
-                autoComplete="off"
-                autoCapitalize="sentences"
-                autoCorrect="off"
-                spellCheck={false}
-                aria-label={`Risposta ${i + 1}`}
-              />
-            ))}
-            {!multi && hint[0] > 0 && (
-              <p className="text-center text-xs text-muted-foreground">
-                {hint[0] < MAX_HINTS
-                  ? `Non era corretta. Ecco un aiuto — vale ${POINTS - hint[0]} ${
-                      POINTS - hint[0] === 1 ? "punto" : "punti"
-                    } se indovini ora.`
-                  : `Ultimo tentativo — vale 1 punto se indovini.`}
-              </p>
-            )}
-          </motion.div>
-        )}
+        {/* Caselle di risposta. SEMPRE nel DOM (anche durante il feedback):
+            così l'input non viene smontato tra domande e mantiene il focus,
+            e su mobile la tastiera resta aperta. Quando l'esito è mostrato
+            l'input è readOnly ma resta focused. */}
+        <motion.div animate={shakeControls} className="space-y-2">
+          {boxes.map((val, i) => (
+            <Input
+              key={i}
+              ref={i === 0 ? firstInputRef : undefined}
+              value={val}
+              onChange={(e) => setBox(i, e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={multi ? `Capitale ${i + 1}…` : "Scrivi la capitale…"}
+              autoComplete="off"
+              autoCapitalize="sentences"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-label={`Risposta ${i + 1}`}
+              readOnly={resolved}
+            />
+          ))}
+          {!multi && hint[0] > 0 && !resolved && (
+            <p className="text-center text-xs text-muted-foreground">
+              {hint[0] < MAX_HINTS
+                ? `Non era corretta. Ecco un aiuto — vale ${POINTS - hint[0]} ${
+                    POINTS - hint[0] === 1 ? "punto" : "punti"
+                  } se indovini ora.`
+                : `Ultimo tentativo — vale 1 punto se indovini.`}
+            </p>
+          )}
+        </motion.div>
 
         {/* Esito */}
         {resolved && (
@@ -372,13 +419,10 @@ export default function QuestionCard({ entry, onNext }) {
             className="w-full"
             size="xl"
             onClick={submit}
-            // Non rubare il focus all'input: così la tastiera mobile resta aperta
-            onMouseDown={(e) => {
-              if (!resolved) e.preventDefault();
-            }}
-            onTouchStart={(e) => {
-              if (!resolved) e.preventDefault();
-            }}
+            // Non rubare mai il focus all'input: così la tastiera mobile
+            // resta aperta anche cliccando "Rispondi" e "Prossima".
+            onMouseDown={(e) => e.preventDefault()}
+            onTouchStart={(e) => e.preventDefault()}
           >
             {resolved ? (
               <>

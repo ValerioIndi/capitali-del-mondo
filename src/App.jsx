@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { RotateCcw, LogOut, Trophy } from "lucide-react";
 
@@ -9,9 +9,9 @@ import ResultScreen from "@/components/ResultScreen";
 import ScoreBar from "@/components/ScoreBar";
 import Modal from "@/components/Modal";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { loadSession, saveSession, clearSession } from "@/utils/session";
 import { getBest, getHistory } from "@/utils/storage";
+import { formatMs } from "@/utils/time";
 
 const POINTS_PER_CAPITAL = 3;
 
@@ -54,6 +54,18 @@ export default function App() {
   const [showRestart, setShowRestart] = useState(false);
   const [showRecord, setShowRecord] = useState(false);
 
+  // Cronometro con pausa/resume:
+  //  - `elapsedMs` è il tempo accumulato al netto delle pause (persistito).
+  //  - `startedAt` (ref) è il timestamp di inizio dell'attuale segmento di
+  //    gioco; è null quando il cronometro è fermo. Quando si esce/finisce,
+  //    aggiungiamo `now - startedAt` a `elapsedMs`.
+  //  - `tick` è un contatore che forza il re-render ogni 500ms mentre si
+  //    gioca, così il display del tempo scorre live senza essere in stato.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startedAtRef = useRef(null);
+  const [, setTick] = useState(0);
+  const [finalTimeMs, setFinalTimeMs] = useState(null);
+
   const total = questions.length;
   const maxScore = useMemo(
     () => questions.reduce((s, q) => s + POINTS_PER_CAPITAL * capitalCount(q), 0),
@@ -61,21 +73,51 @@ export default function App() {
   );
   const current = questions[index];
 
+  // Tempo di gioco "vivo" = accumulato + tempo dal timestamp di start (se attivo).
+  const liveTimeMs = () =>
+    elapsedMs + (startedAtRef.current ? Date.now() - startedAtRef.current : 0);
+
+  // Ferma il cronometro e riversa il tempo dell'ultimo segmento in elapsedMs.
+  // Restituisce il totale in millisecondi al momento dello stop.
+  const stopTimer = () => {
+    if (startedAtRef.current) {
+      const now = Date.now();
+      const total = elapsedMs + (now - startedAtRef.current);
+      startedAtRef.current = null;
+      setElapsedMs(total);
+      return total;
+    }
+    return elapsedMs;
+  };
+
   // Salva la sessione ad ogni cambio di domanda/punteggio, se stiamo giocando.
+  // Salviamo solo l'elapsedMs accumulato "a freddo" (senza sommare il segmento
+  // in corso): al successivo resume ripartiremo esattamente da quel valore.
   useEffect(() => {
     if (phase !== "playing" || questions.length === 0) return;
     saveSession({
       order: questions.map((q) => q.country),
       index,
       score,
+      elapsedMs,
     });
-  }, [phase, questions, index, score]);
+  }, [phase, questions, index, score, elapsedMs]);
+
+  // Aggiornamento del display del cronometro ogni 500ms durante il gioco.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const iv = setInterval(() => setTick((t) => t + 1), 500);
+    return () => clearInterval(iv);
+  }, [phase]);
 
   const startGame = () => {
     const list = shuffle(capitals);
     setQuestions(list);
     setIndex(0);
     setScore(0);
+    setElapsedMs(0);
+    setFinalTimeMs(null);
+    startedAtRef.current = Date.now();
     setSavedSession(null);
     setPhase("playing");
   };
@@ -90,6 +132,9 @@ export default function App() {
     setQuestions(list);
     setIndex(Math.min(savedSession.index, list.length - 1));
     setScore(savedSession.score || 0);
+    setElapsedMs(savedSession.elapsedMs || 0);
+    setFinalTimeMs(null);
+    startedAtRef.current = Date.now();
     setPhase("playing");
   };
 
@@ -97,6 +142,8 @@ export default function App() {
     const newScore = score + earnedPoints;
     setScore(newScore);
     if (index + 1 >= total) {
+      const finalMs = stopTimer();
+      setFinalTimeMs(finalMs);
       clearSession();
       setSavedSession(null);
       setPhase("result");
@@ -105,12 +152,15 @@ export default function App() {
     }
   };
 
-  // "Esci e riprendi quando vuoi": salva e torna alla schermata iniziale.
+  // "Esci e riprendi quando vuoi": ferma il cronometro, salva e torna
+  // alla schermata iniziale.
   const exitGame = () => {
+    const paused = stopTimer();
     saveSession({
       order: questions.map((q) => q.country),
       index,
       score,
+      elapsedMs: paused,
     });
     setSavedSession(loadSession());
     setPhase("start");
@@ -124,7 +174,7 @@ export default function App() {
   };
 
   // Richiesta di iniziare una nuova partita: se ne esiste una salvata, chiedi
-  // conferma prima di sovrascriverla (stessa modale usata da "Ricomincia").
+  // conferma prima di sovrascriverla.
   const requestNewGame = () => {
     if (savedSession) {
       setShowRestart(true);
@@ -147,11 +197,14 @@ export default function App() {
       </header>
 
       {phase === "playing" && (
-        <ScoreBar questionNumber={index + 1} total={total} score={score} />
+        <ScoreBar
+          questionNumber={index + 1}
+          total={total}
+          score={score}
+          timeMs={liveTimeMs()}
+        />
       )}
 
-      {/* IMPORTANTE: quando si gioca il contenuto sta IN ALTO (non centrato),
-          così la tastiera dell'iPhone non copre la casella di risposta. */}
       <main
         className={
           phase === "playing"
@@ -169,6 +222,7 @@ export default function App() {
             <StartScreen
               totalCountries={capitals.length}
               hasSavedSession={Boolean(savedSession)}
+              savedElapsedMs={savedSession?.elapsedMs || 0}
               onStart={requestNewGame}
               onResume={resumeGame}
               onOpenRecord={() => setShowRecord(true)}
@@ -178,14 +232,7 @@ export default function App() {
 
         {phase === "playing" && current && (
           <>
-            <motion.div
-              key={`q-${index}`}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <QuestionCard entry={current} onNext={handleNext} />
-            </motion.div>
+            <QuestionCard entry={current} onNext={handleNext} />
 
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
               <Button
@@ -220,6 +267,7 @@ export default function App() {
             <ResultScreen
               score={score}
               maxScore={maxScore}
+              timeMs={finalTimeMs}
               onRestart={startGame}
             />
           </motion.div>
@@ -271,7 +319,10 @@ export default function App() {
                 {best.score}/{best.max}
               </div>
               <div className="text-xs text-muted-foreground">
-                {Math.round((best.ratio || 0) * 100)}% · {formatDate(best.date)}
+                {Math.round((best.ratio || 0) * 100)}%
+                {Number.isFinite(best.timeMs) && ` · ⏱ ${formatMs(best.timeMs)}`}
+                {" · "}
+                {formatDate(best.date)}
               </div>
             </div>
             {history && history.length > 1 && (
@@ -290,6 +341,11 @@ export default function App() {
                       </span>
                       <span className="font-medium">
                         {h.score}/{h.max}
+                        {Number.isFinite(h.timeMs) && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {formatMs(h.timeMs)}
+                          </span>
+                        )}
                       </span>
                     </div>
                   ))}
