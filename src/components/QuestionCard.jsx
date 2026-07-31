@@ -88,6 +88,32 @@ export default function QuestionCard({ entry, onNext }) {
     };
   }, []);
 
+  // Ref al blocco del feedback: quando la risposta viene rivelata, scrolliamo
+  // per portarlo nell'area visibile SOPRA la tastiera mobile (che copre la
+  // parte bassa della viewport). Usa visualViewport (iOS/Android moderni)
+  // per calcolare l'altezza effettivamente visibile.
+  const feedbackRef = useRef(null);
+  useEffect(() => {
+    if (!resolved || !feedbackRef.current) return;
+    const el = feedbackRef.current;
+    // Piccolo delay per lasciare che il DOM/layout si aggiorni
+    const raf = requestAnimationFrame(() => {
+      const rect = el.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const visibleTop = vv ? vv.offsetTop : 0;
+      const visibleHeight = vv ? vv.height : window.innerHeight;
+      const visibleBottom = visibleTop + visibleHeight;
+      const margin = 12;
+      // Se il feedback finisce sotto l'area visibile (nascosto dalla tastiera),
+      // scrolliamo la pagina di quel tanto per portarlo appena sopra la tastiera.
+      const overflowBelow = rect.bottom - (visibleBottom - margin);
+      if (overflowBelow > 0) {
+        window.scrollBy({ top: overflowBelow, behavior: "smooth" });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [resolved]);
+
   // Reset degli stati quando cambia la domanda, ESEGUITO DURANTE IL RENDER.
   // Pattern "Adjusting State When a Prop Changes" (React docs): usiamo uno
   // useState (non un ref!) per tracciare la prev entry, così React tiene
@@ -354,6 +380,7 @@ export default function QuestionCard({ entry, onNext }) {
         {/* Esito */}
         {resolved && (
           <motion.div
+            ref={feedbackRef}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className={`rounded-lg p-4 text-center ${
