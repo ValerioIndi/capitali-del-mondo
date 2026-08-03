@@ -156,7 +156,7 @@ export default function QuestionCard({ entry, onNext }) {
     advanceTimerRef.current = setTimeout(() => {
       onNextRef.current(pointsSum);
       advanceTimerRef.current = null;
-    }, 1200);
+    }, 1300);
   };
 
   const submit = () => {
